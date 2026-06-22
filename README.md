@@ -1,305 +1,71 @@
-#include <iostream>
-#include <string>
-#include <vector>
-#include <map>
-#include <mutex>
-#include <thread>
-#include <memory>
-#include <iomanip>
+# Online Shopping System (C++)
 
-class Product {
-private:
-    int id;
-    std::string name;
-    std::string description;
-    double price;
-    int stock;
+#### Video Demo: <URL here>
 
-public:
-    Product(int id, const std::string& name, const std::string& desc, double price, int stock)
-        : id(id), name(name), description(desc), price(price), stock(stock) {}
+#### Description:
 
-    int getId() const { return id; }
-    std::string getName() const { return name; }
-    std::string getDescription() const { return description; }
-    double getPrice() const { return price; }
-    int getStock() const { return stock; }
+This project is a simple console-based online shopping system implemented in C++. It simulates a small e-commerce platform where users can browse products, add items to their shopping cart, and complete purchases through a basic checkout flow. The system also demonstrates multithreading to model multiple users interacting with the store at the same time, while maintaining data integrity using mutexes.
 
-    void setPrice(double p) { price = p; }
-    void setStock(int s) { stock = s; }
+## What the project does
 
-    bool reduceStock(int qty) {
-        if (qty <= stock) {
-            stock -= qty;
-            return true;
-        }
-        return false;
-    }
+The application starts by creating a product catalog with a few sample items (such as a laptop, headphones, and a mouse). Each product has a name, description, price, and stock quantity. Users can view the catalog and see the current stock levels.
 
-    void increaseStock(int qty) {
-        stock += qty;
-    }
-};
+The core of the system is the interaction between users and the store:
 
-class ShoppingCart {
-private:
-    // productId -> quantity
-    std::map<int, int> items;
+- Users have their own shopping carts.
+- Each user can add products to their cart with specific quantities.
+- When a user checks out, the system calculates the total cost, applies a discount based on the user type, and asks for confirmation.
+- If the user confirms the purchase, the product stock is updated and an order summary is printed.
 
-public:
-    void addProduct(int productId, int quantity) {
-        if (quantity <= 0) return;
-        items[productId] += quantity;
-    }
+To simulate real-world concurrency, the program creates multiple user objects and runs their shopping sessions in separate threads. These threads attempt to add products and perform checkout operations concurrently. A mutex protects shared product data so that stock quantities remain consistent even when multiple threads are running.
 
-    void removeProduct(int productId) {
-        items.erase(productId);
-    }
+## Files in the project
 
-    void updateQuantity(int productId, int quantity) {
-        if (quantity <= 0) {
-            items.erase(productId);
-        } else {
-            items[productId] = quantity;
-        }
-    }
+- **main.cpp**  
+  Contains the entire implementation of the system, including class definitions and the `main()` function. In a more advanced version, this could be split into multiple header and source files:
+  - `Product.h` / `Product.cpp`
+  - `ShoppingCart.h` / `ShoppingCart.cpp`
+  - `User.h` / `User.cpp`
+  - `Store.h` / `Store.cpp`
 
-    const std::map<int, int>& getItems() const {
-        return items;
-    }
+For this assignment, keeping everything in one file makes it easier to compile and review.
 
-    void clear() {
-        items.clear();
-    }
-};
+## Key classes and design decisions
 
-class User {
-protected:
-    std::string name;
-    std::string email;
-    std::string address;
-    ShoppingCart cart;
+- **Product**  
+  The `Product` class encapsulates product data: ID, name, description, price, and stock quantity. Methods like `reduceStock()` and `increaseStock()` manage inventory changes. Using an integer ID makes it easy to reference products from other classes.
 
-public:
-    User(const std::string& name, const std::string& email, const std::string& address)
-        : name(name), email(email), address(address) {}
+- **ShoppingCart**  
+  The `ShoppingCart` class stores items as a `std::map<int, int>`, mapping product IDs to quantities. This design keeps the cart independent from the actual product objects, which remain in the store’s catalog. The cart provides methods to add, remove, and update quantities, as well as to clear the cart after checkout.
 
-    virtual ~User() = default;
+- **User hierarchy**  
+  The base `User` class holds common information (name, email, address) and a `ShoppingCart`. It defines a virtual method `getDiscountRate()` and a pure virtual method `getType()`.  
+  Derived classes:
+  - `RegularUser` (no discount)
+  - `PremiumUser` (10% discount)
+  - `VipUser` (20% discount)
 
-    virtual double getDiscountRate() const {
-        return 0.0; // regular user default
-    }
+  This inheritance structure cleanly models different user privileges without duplicating code. If new user types are needed in the future, they can be added by extending `User`.
 
-    std::string getName() const { return name; }
-    ShoppingCart& getCart() { return cart; }
+- **Store**  
+  The `Store` class manages the product catalog and checkout logic. It uses a `std::vector<Product>` to store products and a `std::mutex` to protect shared access. The `checkout()` method validates stock, calculates totals and discounts, prompts the user to confirm, and then updates stock quantities. It also prints a detailed order summary.
 
-    virtual std::string getType() const = 0;
-};
+  The `simulateUserSession()` method is used by threads to represent a user’s interaction with the store. It adds items to the user’s cart and calls `checkout()`.
 
-class RegularUser : public User {
-public:
-    RegularUser(const std::string& name, const std::string& email, const std::string& address)
-        : User(name, email, address) {}
+## Multithreading and concurrency
 
-    double getDiscountRate() const override {
-        return 0.0;
-    }
+The program uses `std::thread` to run multiple user sessions at the same time. Each thread calls `Store::simulateUserSession()` with a different user and purchase scenario. Because all threads share the same `Store` instance and product catalog, a `std::mutex` is used to guard operations that read or modify product stock.
 
-    std::string getType() const override {
-        return "Regular";
-    }
-};
+This design demonstrates how to handle concurrent access to shared resources in C++ while keeping data consistent. Without the mutex, two users could oversell a product by reading outdated stock values.
 
-class PremiumUser : public User {
-public:
-    PremiumUser(const std::string& name, const std::string& email, const std::string& address)
-        : User(name, email, address) {}
+## Error handling and validation
 
-    double getDiscountRate() const override {
-        return 0.10; // 10% discount
-    }
+The code includes basic validation, such as:
 
-    std::string getType() const override {
-        return "Premium";
-    }
-};
+- Checking if a product exists before adding it to a cart.
+- Ensuring requested quantities do not exceed available stock.
+- Allowing the user to cancel a purchase at checkout.
 
-class VipUser : public User {
-public:
-    VipUser(const std::string& name, const std::string& email, const std::string& address)
-        : User(name, email, address) {}
+You can extend this with more robust input validation (e.g., handling invalid IDs or non-numeric input) depending on assignment requirements.
 
-    double getDiscountRate() const override {
-        return 0.20; // 20% discount
-    }
-
-    std::string getType() const override {
-        return "VIP";
-    }
-};
-
-class Store {
-private:
-    std::vector<Product> products;
-    std::mutex productMutex;
-
-public:
-    void addProduct(const Product& p) {
-        products.push_back(p);
-    }
-
-    void removeProduct(int id) {
-        products.erase(
-            std::remove_if(products.begin(), products.end(),
-                           [id](const Product& p) { return p.getId() == id; }),
-            products.end()
-        );
-    }
-
-    Product* findProductById(int id) {
-        for (auto& p : products) {
-            if (p.getId() == id) return &p;
-        }
-        return nullptr;
-    }
-
-    void listProducts() {
-        std::cout << "\n=== Product Catalog ===\n";
-        for (const auto& p : products) {
-            std::cout << "ID: " << p.getId()
-                      << " | " << p.getName()
-                      << " | $" << std::fixed << std::setprecision(2) << p.getPrice()
-                      << " | Stock: " << p.getStock() << "\n";
-        }
-        std::cout << "=======================\n";
-    }
-
-    double calculateCartTotal(const ShoppingCart& cart) {
-        double total = 0.0;
-        for (const auto& item : cart.getItems()) {
-            int productId = item.first;
-            int qty = item.second;
-            Product* p = findProductById(productId);
-            if (p) {
-                total += p->getPrice() * qty;
-            }
-        }
-        return total;
-    }
-
-    bool checkout(User& user) {
-        std::lock_guard<std::mutex> lock(productMutex);
-
-        const auto& items = user.getCart().getItems();
-        // Validate stock
-        for (const auto& item : items) {
-            Product* p = findProductById(item.first);
-            if (!p) {
-                std::cout << "Product ID " << item.first << " not found.\n";
-                return false;
-            }
-            if (item.second > p->getStock()) {
-                std::cout << "Insufficient stock for product " << p->getName() << ".\n";
-                return false;
-            }
-        }
-
-        // Calculate total with discount
-        double total = calculateCartTotal(user.getCart());
-        double discountRate = user.getDiscountRate();
-        double discountAmount = total * discountRate;
-        double finalTotal = total - discountAmount;
-
-        std::cout << "\n=== Checkout for " << user.getName()
-                  << " (" << user.getType() << ") ===\n";
-        std::cout << "Cart total: $" << std::fixed << std::setprecision(2) << total << "\n";
-        std::cout << "Discount: " << (discountRate * 100) << "% (-$"
-                  << discountAmount << ")\n";
-        std::cout << "Final total: $" << finalTotal << "\n";
-        std::cout << "Confirm purchase? (yes/no): ";
-
-        std::string input;
-        std::cin >> input;
-        if (input != "yes") {
-            std::cout << "Purchase cancelled.\n";
-            return false;
-        }
-
-        // Deduct stock
-        for (const auto& item : items) {
-            Product* p = findProductById(item.first);
-            p->reduceStock(item.second);
-        }
-
-        // Print order details
-        std::cout << "\n=== Order Details ===\n";
-        for (const auto& item : items) {
-            Product* p = findProductById(item.first);
-            std::cout << p->getName() << " x" << item.second
-                      << " = $" << p->getPrice() * item.second << "\n";
-        }
-        std::cout << "Final total charged: $" << finalTotal << "\n";
-        std::cout << "Shipping to: " << user.getName() << ", " << user.getType()
-                  << " user\n";
-        std::cout << "======================\n";
-
-        user.getCart().clear();
-        return true;
-    }
-
-    // Simulate user actions in a thread
-    void simulateUserSession(std::shared_ptr<User> user, int productIdToAdd, int qty) {
-        {
-            std::lock_guard<std::mutex> lock(productMutex);
-            Product* p = findProductById(productIdToAdd);
-            if (!p) {
-                std::cout << user->getName() << ": product not found.\n";
-                return;
-            }
-            if (qty > p->getStock()) {
-                std::cout << user->getName() << ": not enough stock to add " << qty
-                          << " of " << p->getName() << "\n";
-                return;
-            }
-        }
-
-        // Add to cart (no shared data here, cart is per-user)
-        user->getCart().addProduct(productIdToAdd, qty);
-        std::cout << user->getName() << " added " << qty << " of product ID "
-                  << productIdToAdd << " to cart.\n";
-
-        // Checkout
-        checkout(*user);
-    }
-};
-
-int main() {
-    Store store;
-
-    // Seed products
-    store.addProduct(Product(1, "Laptop", "15-inch, 16GB RAM", 999.99, 10));
-    store.addProduct(Product(2, "Headphones", "Noise-cancelling", 199.99, 20));
-    store.addProduct(Product(3, "Mouse", "Wireless mouse", 49.99, 30));
-
-    store.listProducts();
-
-    // Create users
-    auto user1 = std::make_shared<RegularUser>("Alice", "alice@example.com", "123 Main St");
-    auto user2 = std::make_shared<PremiumUser>("Bob", "bob@example.com", "456 Oak Ave");
-    auto user3 = std::make_shared<VipUser>("Charlie", "charlie@example.com", "789 Pine Rd");
-
-    // Simulate concurrent sessions
-    std::thread t1(&Store::simulateUserSession, &store, user1, 1, 2); // Alice buys 2 laptops
-    std::thread t2(&Store::simulateUserSession, &store, user2, 1, 3); // Bob buys 3 laptops
-    std::thread t3(&Store::simulateUserSession, &store, user3, 2, 5); // Charlie buys 5 headphones
-
-    t1.join();
-    t2.join();
-    t3.join();
-
-    std::cout << "\nFinal product catalog after purchases:\n";
-    store.listProducts();
-
-    return 0;
-}
 
